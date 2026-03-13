@@ -1,1 +1,1 @@
-# jejuyukrim-groupbuy
+# jejuyookrim-groupbuy
