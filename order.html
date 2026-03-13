@@ -112,18 +112,53 @@
     </div>
   </div>
 
-  <script>
-    function submitOrder() {
-      const name = document.getElementById('name').value;
-      const phone = document.getElementById('phone').value;
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-      if (!name || !phone) {
-        alert('주문자명과 연락처를 입력해주세요.');
-        return;
-      }
+<script>
 
-      alert('주문이 접수되었습니다. 현재는 테스트 버전입니다.');
-    }
-  </script>
+const SUPABASE_URL = "https://jujdlznyoddugfpprbrg.supabase.co"
+const SUPABASE_KEY = "sb_publishable_SR1mAWxL3e4rUzG-icOU-A_nExPpzXJ"
+
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
+
+async function submitOrder(){
+
+const name = document.getElementById("name").value
+const phone = document.getElementById("phone").value
+const part = document.getElementById("part").value
+const weight = document.getElementById("weight").value
+const store = document.getElementById("store").value
+const payment = document.getElementById("payment").value
+const memo = document.getElementById("memo").value
+
+if (!name || !phone) {
+alert("주문자명과 연락처를 입력해주세요.")
+return
+}
+
+const { error } = await supabaseClient
+.from("orders")
+.insert([
+{
+customer_name:name,
+phone:phone,
+part:part,
+weight:weight,
+pickup_store:store,
+payment_method:payment,
+memo:memo
+}
+])
+
+if(error){
+alert("주문 저장 실패")
+return
+}
+
+alert("주문이 접수되었습니다")
+
+}
+
+</script>
 </body>
 </html>
