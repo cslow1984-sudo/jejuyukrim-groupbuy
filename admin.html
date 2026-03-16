@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>제주육림 공동구매 관리자</title>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+
+<style>
+
+body{
+font-family: Arial;
+background:#f4f4f4;
+padding:40px;
+}
+
+h1{
+margin-bottom:10px;
+}
+
+button{
+padding:10px 20px;
+margin-right:10px;
+cursor:pointer;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+margin-top:20px;
+background:white;
+}
+
+th,td{
+border:1px solid #ddd;
+padding:10px;
+text-align:center;
+}
+
+th{
+background:#222;
+color:white;
+}
+
+</style>
+</head>
+
+<body>
+
+<h1>제주육림 공동구매 주문 관리</h1>
+
+<button onclick="loadOrders()">주문 불러오기</button>
+<button onclick="downloadExcel()">엑셀 다운로드</button>
+
+<div id="count"></div>
+
+<table id="ordersTable">
+
+<thead>
+<tr>
+
+<th>주문시간</th>
+<th>이름</th>
+<th>연락처</th>
+<th>상품</th>
+<th>수량</th>
+<th>수령방식</th>
+<th>요청사항</th>
+
+</tr>
+</thead>
+
+<tbody>
+</tbody>
+
+</table>
+
+<script>
+
+const SUPABASE_URL = "여기에 Supabase URL";
+const SUPABASE_KEY = "여기에 anon public key";
+
+const supabase = window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+
+let ordersData = [];
+
+async function loadOrders(){
+
+const { data, error } = await supabase
+.from("orders")
+.select("*")
+.order("created_at",{ascending:false});
+
+if(error){
+
+alert("주문 불러오기 실패");
+return;
+
+}
+
+ordersData = data;
+
+const tbody = document.querySelector("#ordersTable tbody");
+tbody.innerHTML="";
+
+data.forEach(order=>{
+
+const tr = document.createElement("tr");
+
+tr.innerHTML=`
+
+<td>${order.created_at ?? ""}</td>
+<td>${order.name ?? ""}</td>
+<td>${order.phone ?? ""}</td>
+<td>${order.product ?? ""}</td>
+<td>${order.quantity ?? ""}</td>
+<td>${order.method ?? ""}</td>
+<td>${order.memo ?? ""}</td>
+
+`;
+
+tbody.appendChild(tr);
+
+});
+
+document.getElementById("count").innerText="총 주문 : "+data.length+"건";
+
+}
+
+function downloadExcel(){
+
+const worksheet = XLSX.utils.json_to_sheet(ordersData);
+const workbook = XLSX.utils.book_new();
+
+XLSX.utils.book_append_sheet(workbook,worksheet,"orders");
+
+XLSX.writeFile(workbook,"orders.xlsx");
+
+}
+
+</script>
+
+</body>
+</html>
