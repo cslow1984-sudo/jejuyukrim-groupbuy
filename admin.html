@@ -8,7 +8,6 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 
 <style>
-
 body{
 font-family: Arial;
 background:#f4f4f4;
@@ -42,7 +41,6 @@ th{
 background:#222;
 color:white;
 }
-
 </style>
 </head>
 
@@ -56,32 +54,28 @@ color:white;
 <div id="count"></div>
 
 <table id="ordersTable">
-
 <thead>
 <tr>
-
 <th>주문시간</th>
-<th>이름</th>
+<th>주문자명</th>
 <th>연락처</th>
-<th>상품</th>
-<th>수량</th>
-<th>수령방식</th>
+<th>부위</th>
+<th>중량</th>
+<th>수령매장</th>
+<th>결제방식</th>
 <th>요청사항</th>
-
 </tr>
 </thead>
 
 <tbody>
 </tbody>
-
 </table>
 
 <script>
+const SUPABASE_URL = "https://juidlznyoddugfprbrg.supabase.co";
+const SUPABASE_KEY = "sb_publishable_SR1mAWxL3e4rUzG-icOU-A_nExPpzXJ";
 
-const SUPABASE_URL = "여기에 Supabase URL";
-const SUPABASE_KEY = "여기에 anon public key";
-
-const supabase = window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let ordersData = [];
 
@@ -93,10 +87,9 @@ const { data, error } = await supabase
 .order("created_at",{ascending:false});
 
 if(error){
-
 alert("주문 불러오기 실패");
+console.log(error);
 return;
-
 }
 
 ordersData = data;
@@ -109,15 +102,14 @@ data.forEach(order=>{
 const tr = document.createElement("tr");
 
 tr.innerHTML=`
-
 <td>${order.created_at ?? ""}</td>
-<td>${order.name ?? ""}</td>
+<td>${order.customer_name ?? ""}</td>
 <td>${order.phone ?? ""}</td>
-<td>${order.product ?? ""}</td>
-<td>${order.quantity ?? ""}</td>
-<td>${order.method ?? ""}</td>
+<td>${order.part ?? ""}</td>
+<td>${order.weight ?? ""}</td>
+<td>${order.pickup_store ?? ""}</td>
+<td>${order.payment_method ?? ""}</td>
 <td>${order.memo ?? ""}</td>
-
 `;
 
 tbody.appendChild(tr);
@@ -125,20 +117,15 @@ tbody.appendChild(tr);
 });
 
 document.getElementById("count").innerText="총 주문 : "+data.length+"건";
-
 }
 
 function downloadExcel(){
-
 const worksheet = XLSX.utils.json_to_sheet(ordersData);
 const workbook = XLSX.utils.book_new();
 
 XLSX.utils.book_append_sheet(workbook,worksheet,"orders");
-
 XLSX.writeFile(workbook,"orders.xlsx");
-
 }
-
 </script>
 
 </body>
