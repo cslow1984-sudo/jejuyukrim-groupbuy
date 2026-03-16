@@ -20,6 +20,10 @@ h1{
   margin-bottom:10px;
 }
 
+h2{
+  margin-top:0;
+}
+
 button{
   padding:10px 20px;
   margin-right:10px;
@@ -27,6 +31,17 @@ button{
   cursor:pointer;
   border:1px solid #999;
   background:#fff;
+  font-size:14px;
+}
+
+input[type="password"]{
+  width:100%;
+  max-width:360px;
+  padding:12px;
+  font-size:16px;
+  border:1px solid #ccc;
+  box-sizing:border-box;
+  margin-bottom:12px;
 }
 
 #count{
@@ -53,6 +68,30 @@ th{
   color:white;
 }
 
+.hidden{
+  display:none;
+}
+
+.login-box{
+  max-width:500px;
+  background:white;
+  padding:30px;
+  border:1px solid #ddd;
+}
+
+.notice{
+  font-size:13px;
+  color:#666;
+  margin-top:8px;
+  line-height:1.6;
+}
+
+.error-text{
+  color:#d93025;
+  font-size:14px;
+  margin-top:8px;
+}
+
 @media (max-width: 768px){
   body{
     padding:20px 12px;
@@ -75,41 +114,73 @@ th{
     font-size:13px;
     padding:8px;
   }
+
+  .login-box{
+    padding:20px;
+  }
 }
 </style>
 </head>
 
 <body>
 
-<h1>제주육림 공동구매 주문 관리</h1>
+<div id="loginArea" class="login-box">
+  <h1>제주육림 관리자 로그인</h1>
+  <p>관리자 비밀번호를 입력해주세요.</p>
 
-<button onclick="loadOrders()">주문 불러오기</button>
-<button onclick="downloadExcel()">엑셀 다운로드</button>
+  <input
+    type="password"
+    id="adminPassword"
+    placeholder="관리자 비밀번호 입력"
+    onkeydown="if(event.key==='Enter'){checkPassword();}"
+  >
 
-<div id="count">총 주문 : 0건</div>
+  <br>
+  <button onclick="checkPassword()">입장하기</button>
 
-<div class="table-wrap">
-  <table id="ordersTable">
-    <thead>
-      <tr>
-        <th>주문시간</th>
-        <th>주문자명</th>
-        <th>연락처</th>
-        <th>부위</th>
-        <th>중량</th>
-        <th>수령매장</th>
-        <th>결제방식</th>
-        <th>요청사항</th>
-      </tr>
-    </thead>
-    <tbody>
-    </tbody>
-  </table>
+  <div id="loginError" class="error-text"></div>
+
+  <div class="notice">
+    현재 버전은 1차 관리자 페이지입니다.<br>
+    추후 정식 로그인 방식으로 고도화 가능합니다.
+  </div>
+</div>
+
+<div id="adminArea" class="hidden">
+  <h1>제주육림 공동구매 주문 관리</h1>
+
+  <button onclick="loadOrders()">주문 불러오기</button>
+  <button onclick="downloadExcel()">엑셀 다운로드</button>
+  <button onclick="logoutAdmin()">로그아웃</button>
+
+  <div id="count">총 주문 : 0건</div>
+
+  <div class="table-wrap">
+    <table id="ordersTable">
+      <thead>
+        <tr>
+          <th>주문시간</th>
+          <th>주문자명</th>
+          <th>연락처</th>
+          <th>부위</th>
+          <th>중량</th>
+          <th>수령매장</th>
+          <th>결제방식</th>
+          <th>요청사항</th>
+        </tr>
+      </thead>
+      <tbody>
+      </tbody>
+    </table>
+  </div>
 </div>
 
 <script>
 const SUPABASE_URL = "https://jujdlznyoddugfpprbrg.supabase.co";
 const SUPABASE_KEY = "sb_publishable_SR1mAWxL3e4rUzG-icOU-A_nExPpzXJ";
+
+/* 여기 비밀번호만 원하는 값으로 바꾸시면 됩니다 */
+const ADMIN_PASSWORD = "jejuyookrim9900!";
 
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -127,6 +198,42 @@ function formatDate(dateString){
   const seconds = String(date.getSeconds()).padStart(2, "0");
 
   return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+}
+
+function checkPassword(){
+  const enteredPassword = document.getElementById("adminPassword").value;
+  const loginError = document.getElementById("loginError");
+
+  if(enteredPassword !== ADMIN_PASSWORD){
+    loginError.innerText = "비밀번호가 올바르지 않습니다.";
+    return;
+  }
+
+  loginError.innerText = "";
+  sessionStorage.setItem("jejuyukrim_admin_auth", "true");
+
+  document.getElementById("loginArea").classList.add("hidden");
+  document.getElementById("adminArea").classList.remove("hidden");
+
+  loadOrders();
+}
+
+function logoutAdmin(){
+  sessionStorage.removeItem("jejuyukrim_admin_auth");
+  document.getElementById("adminArea").classList.add("hidden");
+  document.getElementById("loginArea").classList.remove("hidden");
+  document.getElementById("adminPassword").value = "";
+  document.getElementById("loginError").innerText = "";
+}
+
+function restoreAdminSession(){
+  const isAuthed = sessionStorage.getItem("jejuyukrim_admin_auth");
+
+  if(isAuthed === "true"){
+    document.getElementById("loginArea").classList.add("hidden");
+    document.getElementById("adminArea").classList.remove("hidden");
+    loadOrders();
+  }
 }
 
 async function loadOrders(){
@@ -201,6 +308,8 @@ function downloadExcel(){
   XLSX.utils.book_append_sheet(workbook, worksheet, "orders");
   XLSX.writeFile(workbook, "jejuyukrim_orders.xlsx");
 }
+
+restoreAdminSession();
 </script>
 
 </body>
