@@ -92,6 +92,60 @@ th{
   margin-top:8px;
 }
 
+.table-wrap{
+  overflow-x:auto;
+}
+
+.status-row{
+  margin: 8px 0 16px 0;
+  font-size: 13px;
+  color:#555;
+}
+
+.toast-wrap{
+  position:fixed;
+  top:20px;
+  right:20px;
+  z-index:9999;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+.toast{
+  min-width:280px;
+  max-width:360px;
+  background:#1f1f1f;
+  color:#fff;
+  padding:14px 16px;
+  border-radius:12px;
+  box-shadow:0 8px 24px rgba(0,0,0,0.2);
+  border-left:5px solid #c89b3c;
+  animation:slideIn 0.25s ease;
+}
+
+.toast-title{
+  font-weight:bold;
+  margin-bottom:6px;
+}
+
+.toast-body{
+  font-size:13px;
+  line-height:1.5;
+  color:#ddd;
+}
+
+@keyframes slideIn{
+  from{
+    opacity:0;
+    transform:translateY(-8px);
+  }
+  to{
+    opacity:1;
+    transform:translateY(0);
+  }
+}
+
 @media (max-width: 768px){
   body{
     padding:20px 12px;
@@ -100,10 +154,6 @@ th{
   h1{
     font-size:28px;
     line-height:1.3;
-  }
-
-  .table-wrap{
-    overflow-x:auto;
   }
 
   table{
@@ -118,11 +168,24 @@ th{
   .login-box{
     padding:20px;
   }
+
+  .toast-wrap{
+    left:12px;
+    right:12px;
+    top:12px;
+  }
+
+  .toast{
+    min-width:auto;
+    max-width:none;
+  }
 }
 </style>
 </head>
 
 <body>
+
+<div id="toastWrap" class="toast-wrap"></div>
 
 <div id="loginArea" class="login-box">
   <h1>제주육림 관리자 로그인</h1>
@@ -142,7 +205,7 @@ th{
 
   <div class="notice">
     현재 버전은 1차 관리자 페이지입니다.<br>
-    추후 정식 로그인 방식으로 고도화 가능합니다.
+    비밀번호 통과 후 주문 조회, 엑셀 다운로드, 실시간 알림이 가능합니다.
   </div>
 </div>
 
@@ -154,6 +217,7 @@ th{
   <button onclick="logoutAdmin()">로그아웃</button>
 
   <div id="count">총 주문 : 0건</div>
+  <div id="realtimeStatus" class="status-row">실시간 대기 중...</div>
 
   <div class="table-wrap">
     <table id="ordersTable">
@@ -179,12 +243,15 @@ th{
 const SUPABASE_URL = "https://jujdlznyoddugfpprbrg.supabase.co";
 const SUPABASE_KEY = "sb_publishable_SR1mAWxL3e4rUzG-icOU-A_nExPpzXJ";
 
-/* 여기 비밀번호만 원하는 값으로 바꾸시면 됩니다 */
+/* 여기 비밀번호만 바꾸시면 됩니다 */
 const ADMIN_PASSWORD = "jejuyookrim9900!";
 
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let ordersData = [];
+let realtimeChannel = null;
+let seenOrderIds = new Set();
+let audioUnlocked = false;
 
 function formatDate(dateString){
   if(!dateString) return "";
@@ -198,6 +265,165 @@ function formatDate(dateString){
   const seconds = String(date.getSeconds()).padStart(2, "0");
 
   return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+}
+
+function escapeHtml(value){
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function renderOrders(){
+  const tbody = document.querySelector("#ordersTable tbody");
+  tbody.innerHTML = "";
+
+  if(ordersData.length === 0){
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td colspan="8">주문 데이터가 없습니다.</td>`;
+    tbody.appendChild(tr);
+    document.getElementById("count").innerText = "총 주문 : 0건";
+    return;
+  }
+
+  ordersData.forEach(order => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${formatDate(order.created_at)}</td>
+      <td>${escapeHtml(order.customer_name)}</td>
+      <td>${escapeHtml(order.phone)}</td>
+      <td>${escapeHtml(order.part)}</td>
+      <td>${escapeHtml(order.weight)}</td>
+      <td>${escapeHtml(order.pickup_store)}</td>
+      <td>${escapeHtml(order.payment_method)}</td>
+      <td>${escapeHtml(order.memo)}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById("count").innerText = "총 주문 : " + ordersData.length + "건";
+}
+
+async function loadOrders(){
+  const { data, error } = await supabaseClient
+    .from("orders")
+    .select("*")
+    .order("created_at", { ascending:false });
+
+  if(error){
+    alert("주문 불러오기 실패");
+    console.log(error);
+    return;
+  }
+
+  ordersData = data || [];
+  seenOrderIds = new Set(ordersData.map(order => order.id));
+  renderOrders();
+}
+
+function prependOrder(newOrder){
+  ordersData.unshift(newOrder);
+  seenOrderIds.add(newOrder.id);
+  renderOrders();
+}
+
+function showToast(order){
+  const toastWrap = document.getElementById("toastWrap");
+  const toast = document.createElement("div");
+  toast.className = "toast";
+
+  toast.innerHTML = `
+    <div class="toast-title">🔔 새 주문이 들어왔습니다</div>
+    <div class="toast-body">
+      주문자: ${escapeHtml(order.customer_name)}<br>
+      부위: ${escapeHtml(order.part)} / ${escapeHtml(order.weight)}<br>
+      수령매장: ${escapeHtml(order.pickup_store)}<br>
+      결제방식: ${escapeHtml(order.payment_method)}
+    </div>
+  `;
+
+  toastWrap.appendChild(toast);
+
+  setTimeout(() => {
+    toast.remove();
+  }, 5000);
+}
+
+function unlockAudio(){
+  audioUnlocked = true;
+}
+
+function playBeep(){
+  if(!audioUnlocked) return;
+
+  try{
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if(!AudioContextClass) return;
+
+    const audioContext = new AudioContextClass();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(880, audioContext.currentTime);
+
+    gainNode.gain.setValueAtTime(0.001, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.2, audioContext.currentTime + 0.01);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.35);
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.35);
+  }catch(error){
+    console.log("소리 재생 실패", error);
+  }
+}
+
+async function subscribeRealtime(){
+  if(realtimeChannel){
+    return;
+  }
+
+  document.getElementById("realtimeStatus").innerText = "실시간 연결 중...";
+
+  realtimeChannel = supabaseClient
+    .channel("orders-realtime-channel")
+    .on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "orders"
+      },
+      (payload) => {
+        const newOrder = payload.new;
+
+        if(seenOrderIds.has(newOrder.id)){
+          return;
+        }
+
+        prependOrder(newOrder);
+        showToast(newOrder);
+        playBeep();
+      }
+    )
+    .subscribe((status) => {
+      if(status === "SUBSCRIBED"){
+        document.getElementById("realtimeStatus").innerText = "실시간 연결 완료";
+      }else{
+        document.getElementById("realtimeStatus").innerText = "실시간 상태: " + status;
+      }
+    });
+}
+
+async function initAdmin(){
+  unlockAudio();
+  await loadOrders();
+  await subscribeRealtime();
 }
 
 function checkPassword(){
@@ -215,15 +441,22 @@ function checkPassword(){
   document.getElementById("loginArea").classList.add("hidden");
   document.getElementById("adminArea").classList.remove("hidden");
 
-  loadOrders();
+  initAdmin();
 }
 
 function logoutAdmin(){
   sessionStorage.removeItem("jejuyukrim_admin_auth");
+
+  if(realtimeChannel){
+    supabaseClient.removeChannel(realtimeChannel);
+    realtimeChannel = null;
+  }
+
   document.getElementById("adminArea").classList.add("hidden");
   document.getElementById("loginArea").classList.remove("hidden");
   document.getElementById("adminPassword").value = "";
   document.getElementById("loginError").innerText = "";
+  document.getElementById("realtimeStatus").innerText = "실시간 대기 중...";
 }
 
 function restoreAdminSession(){
@@ -232,60 +465,11 @@ function restoreAdminSession(){
   if(isAuthed === "true"){
     document.getElementById("loginArea").classList.add("hidden");
     document.getElementById("adminArea").classList.remove("hidden");
-    loadOrders();
+    initAdmin();
   }
-}
-
-async function loadOrders(){
-
-  const { data, error } = await supabaseClient
-    .from("orders")
-    .select("*")
-    .order("created_at", { ascending:false });
-
-  if(error){
-    alert("주문 불러오기 실패");
-    console.log(error);
-    return;
-  }
-
-  ordersData = data || [];
-
-  const tbody = document.querySelector("#ordersTable tbody");
-  tbody.innerHTML = "";
-
-  if(ordersData.length === 0){
-    const tr = document.createElement("tr");
-    tr.innerHTML = `<td colspan="8">주문 데이터가 없습니다.</td>`;
-    tbody.appendChild(tr);
-    document.getElementById("count").innerText = "총 주문 : 0건";
-    return;
-  }
-
-  ordersData.forEach(order => {
-
-    const tr = document.createElement("tr");
-
-    tr.innerHTML = `
-      <td>${formatDate(order.created_at)}</td>
-      <td>${order.customer_name ?? ""}</td>
-      <td>${order.phone ?? ""}</td>
-      <td>${order.part ?? ""}</td>
-      <td>${order.weight ?? ""}</td>
-      <td>${order.pickup_store ?? ""}</td>
-      <td>${order.payment_method ?? ""}</td>
-      <td>${order.memo ?? ""}</td>
-    `;
-
-    tbody.appendChild(tr);
-
-  });
-
-  document.getElementById("count").innerText = "총 주문 : " + ordersData.length + "건";
 }
 
 function downloadExcel(){
-
   if(!ordersData.length){
     alert("다운로드할 주문 데이터가 없습니다. 먼저 주문을 불러와주세요.");
     return;
