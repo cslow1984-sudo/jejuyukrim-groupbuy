@@ -140,10 +140,7 @@ color:#f0c25b;
 </select>
 
 <label for="weight">중량 선택</label>
-<select id="weight" onchange="updatePriceBox()">
-<option>500g</option>
-<option>1kg</option>
-</select>
+<select id="weight" onchange="updatePriceBox()"></select>
 
 <div id="priceBox" class="price-box">
   <div class="price-line">
@@ -224,10 +221,31 @@ function formatMoney(value){
   return Number(value || 0).toLocaleString("ko-KR") + "원"
 }
 
-function parseWeightToGram(weightText){
-  if(weightText === "500g") return 500
-  if(weightText === "1kg") return 1000
-  return 0
+function formatWeightText(gram){
+  if(gram >= 1000){
+    const kg = gram / 1000
+    return Number.isInteger(kg) ? `${kg}kg` : `${kg.toFixed(1)}kg`
+  }
+  return `${gram}g`
+}
+
+function buildWeightOptions(){
+  const weightSelect = document.getElementById("weight")
+  weightSelect.innerHTML = ""
+
+  for(let gram = 300; gram <= 2000; gram += 100){
+    const option = document.createElement("option")
+    option.value = String(gram)
+    option.textContent = formatWeightText(gram)
+    if(gram === 500){
+      option.selected = true
+    }
+    weightSelect.appendChild(option)
+  }
+}
+
+function parseWeightToGram(weightValue){
+  return Number(weightValue || 0)
 }
 
 function getSelectedProduct(){
@@ -355,7 +373,8 @@ async function submitOrder(){
 const name = document.getElementById("name").value.trim()
 const phone = document.getElementById("phone").value.trim()
 const part = document.getElementById("part").value
-const weight = document.getElementById("weight").value
+const weightGram = parseWeightToGram(document.getElementById("weight").value)
+const weightText = formatWeightText(weightGram)
 const store = document.getElementById("store").value
 const payment = document.getElementById("payment").value
 const memo = document.getElementById("memo").value.trim()
@@ -376,7 +395,8 @@ alert("선택한 상품 정보를 찾을 수 없습니다.")
 return
 }
 
-const totalPrice = formatMoney((parseWeightToGram(weight) / 100) * (selectedProduct.price_per_100g || 0))
+const totalAmount = (weightGram / 100) * (selectedProduct.price_per_100g || 0)
+const totalPrice = formatMoney(totalAmount)
 
 const { error } = await supabaseClient
 .from("orders")
@@ -385,13 +405,13 @@ const { error } = await supabaseClient
 customer_name:name,
 phone:phone,
 part:part,
-weight:weight,
+weight:weightText,
 pickup_store:store,
 payment_method:payment,
 memo:memo,
 round_id: currentRound.id,
-order_summary: `${part} ${weight}`,
-total_amount: (parseWeightToGram(weight) / 100) * (selectedProduct.price_per_100g || 0)
+order_summary: `${part} ${weightText}`,
+total_amount: totalAmount
 }
 ])
 
@@ -405,7 +425,7 @@ await sendTelegramAlert({
 name,
 phone,
 part,
-weight,
+weight: weightText,
 totalPrice,
 store,
 payment,
@@ -417,11 +437,12 @@ alert("주문이 접수되었습니다")
 document.getElementById("name").value=""
 document.getElementById("phone").value=""
 document.getElementById("memo").value=""
-document.getElementById("weight").value="500g"
+document.getElementById("weight").value="500"
 updatePriceBox()
 
 }
 
+buildWeightOptions()
 loadActiveRoundAndProducts()
 
 </script>
