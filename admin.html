@@ -157,7 +157,7 @@ th{
   }
 
   table{
-    min-width:900px;
+    min-width:1100px;
   }
 
   th, td{
@@ -228,6 +228,7 @@ th{
           <th>연락처</th>
           <th>부위</th>
           <th>중량</th>
+          <th>총금액</th>
           <th>수령매장</th>
           <th>결제방식</th>
           <th>요청사항</th>
@@ -267,6 +268,10 @@ function formatDate(dateString){
   return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 }
 
+function formatMoney(value){
+  return Number(value || 0).toLocaleString("ko-KR") + "원";
+}
+
 function escapeHtml(value){
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -282,7 +287,7 @@ function renderOrders(){
 
   if(ordersData.length === 0){
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td colspan="8">주문 데이터가 없습니다.</td>`;
+    tr.innerHTML = `<td colspan="9">주문 데이터가 없습니다.</td>`;
     tbody.appendChild(tr);
     document.getElementById("count").innerText = "총 주문 : 0건";
     return;
@@ -296,6 +301,7 @@ function renderOrders(){
       <td>${escapeHtml(order.phone)}</td>
       <td>${escapeHtml(order.part)}</td>
       <td>${escapeHtml(order.weight)}</td>
+      <td>${formatMoney(order.total_amount)}</td>
       <td>${escapeHtml(order.pickup_store)}</td>
       <td>${escapeHtml(order.payment_method)}</td>
       <td>${escapeHtml(order.memo)}</td>
@@ -339,6 +345,7 @@ function showToast(order){
     <div class="toast-body">
       주문자: ${escapeHtml(order.customer_name)}<br>
       부위: ${escapeHtml(order.part)} / ${escapeHtml(order.weight)}<br>
+      총금액: ${formatMoney(order.total_amount)}<br>
       수령매장: ${escapeHtml(order.pickup_store)}<br>
       결제방식: ${escapeHtml(order.payment_method)}
     </div>
@@ -481,6 +488,7 @@ function downloadExcel(){
     연락처: order.phone ?? "",
     부위: order.part ?? "",
     중량: order.weight ?? "",
+    총금액: Number(order.total_amount || 0),
     수령매장: order.pickup_store ?? "",
     결제방식: order.payment_method ?? "",
     요청사항: order.memo ?? ""
