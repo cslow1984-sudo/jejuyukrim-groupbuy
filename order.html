@@ -88,6 +88,31 @@ font-size:14px;
 color:#ff6b6b;
 line-height:1.6;
 }
+
+.price-box{
+margin-top:16px;
+padding:16px;
+border-radius:12px;
+background:#2a2418;
+border:1px solid #4a3a1a;
+line-height:1.8;
+font-size:15px;
+}
+
+.price-line{
+display:flex;
+justify-content:space-between;
+gap:12px;
+}
+
+.price-label{
+color:#ddd;
+}
+
+.price-value{
+font-weight:bold;
+color:#f0c25b;
+}
 </style>
 
 </head>
@@ -110,15 +135,26 @@ line-height:1.6;
 <input id="phone" type="text" placeholder="010-0000-0000">
 
 <label for="part">부위 선택</label>
-<select id="part">
+<select id="part" onchange="updatePriceBox()">
 <option>불러오는 중...</option>
 </select>
 
 <label for="weight">중량 선택</label>
-<select id="weight">
+<select id="weight" onchange="updatePriceBox()">
 <option>500g</option>
 <option>1kg</option>
 </select>
+
+<div id="priceBox" class="price-box">
+  <div class="price-line">
+    <span class="price-label">100g당 가격</span>
+    <span id="unitPriceText" class="price-value">불러오는 중...</span>
+  </div>
+  <div class="price-line">
+    <span class="price-label">예상 결제금액</span>
+    <span id="totalPriceText" class="price-value">불러오는 중...</span>
+  </div>
+</div>
 
 <label for="store">수령 매장</label>
 <select id="store">
@@ -173,6 +209,50 @@ function setSubmitDisabled(disabled){
   document.getElementById("submitBtn").disabled = disabled
 }
 
+function formatDate(value){
+  if(!value) return "-"
+  const date = new Date(value)
+
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+
+  return `${year}-${month}-${day}`
+}
+
+function formatMoney(value){
+  return Number(value || 0).toLocaleString("ko-KR") + "원"
+}
+
+function parseWeightToGram(weightText){
+  if(weightText === "500g") return 500
+  if(weightText === "1kg") return 1000
+  return 0
+}
+
+function getSelectedProduct(){
+  const part = document.getElementById("part").value
+  return loadedProducts.find(product => product.name === part)
+}
+
+function updatePriceBox(){
+  const selectedProduct = getSelectedProduct()
+  const selectedWeight = document.getElementById("weight").value
+
+  if(!selectedProduct){
+    document.getElementById("unitPriceText").innerText = "-"
+    document.getElementById("totalPriceText").innerText = "-"
+    return
+  }
+
+  const unitPrice = selectedProduct.price_per_100g || 0
+  const gram = parseWeightToGram(selectedWeight)
+  const totalPrice = (gram / 100) * unitPrice
+
+  document.getElementById("unitPriceText").innerText = formatMoney(unitPrice)
+  document.getElementById("totalPriceText").innerText = formatMoney(totalPrice)
+}
+
 async function loadActiveRoundAndProducts(){
   setLoadError("")
   setSubmitDisabled(true)
@@ -192,6 +272,8 @@ async function loadActiveRoundAndProducts(){
     setRoundInfo("현재 진행 중인 공동구매가 없습니다.")
     setLoadError("진행 중인 공동구매 회차를 찾을 수 없습니다.")
     partSelect.innerHTML = "<option>진행 중인 공동구매 없음</option>"
+    document.getElementById("unitPriceText").innerText = "-"
+    document.getElementById("totalPriceText").innerText = "-"
     return
   }
 
@@ -211,6 +293,8 @@ async function loadActiveRoundAndProducts(){
   if(productError){
     setLoadError("상품 목록을 불러오지 못했습니다.")
     partSelect.innerHTML = "<option>상품 불러오기 실패</option>"
+    document.getElementById("unitPriceText").innerText = "-"
+    document.getElementById("totalPriceText").innerText = "-"
     return
   }
 
@@ -219,6 +303,8 @@ async function loadActiveRoundAndProducts(){
   if(!loadedProducts.length){
     setLoadError("등록된 상품이 없습니다.")
     partSelect.innerHTML = "<option>등록된 상품 없음</option>"
+    document.getElementById("unitPriceText").innerText = "-"
+    document.getElementById("totalPriceText").innerText = "-"
     return
   }
 
@@ -231,18 +317,8 @@ async function loadActiveRoundAndProducts(){
     partSelect.appendChild(option)
   })
 
+  updatePriceBox()
   setSubmitDisabled(false)
-}
-
-function formatDate(value){
-  if(!value) return "-"
-  const date = new Date(value)
-
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, "0")
-  const day = String(date.getDate()).padStart(2, "0")
-
-  return `${year}-${month}-${day}`
 }
 
 async function sendTelegramAlert(data){
@@ -254,6 +330,7 @@ const message =
 연락처: ${data.phone}
 부위: ${data.part}
 중량: ${data.weight}
+예상금액: ${data.totalPrice}
 수령매장: ${data.store}
 결제방식: ${data.payment}
 요청사항: ${data.memo || "없음"}`
@@ -293,6 +370,14 @@ alert("현재 진행 중인 공동구매가 없습니다.")
 return
 }
 
+const selectedProduct = getSelectedProduct()
+if(!selectedProduct){
+alert("선택한 상품 정보를 찾을 수 없습니다.")
+return
+}
+
+const totalPrice = formatMoney((parseWeightToGram(weight) / 100) * (selectedProduct.price_per_100g || 0))
+
 const { error } = await supabaseClient
 .from("orders")
 .insert([
@@ -305,7 +390,8 @@ pickup_store:store,
 payment_method:payment,
 memo:memo,
 round_id: currentRound.id,
-order_summary: `${part} ${weight}`
+order_summary: `${part} ${weight}`,
+total_amount: (parseWeightToGram(weight) / 100) * (selectedProduct.price_per_100g || 0)
 }
 ])
 
@@ -320,6 +406,7 @@ name,
 phone,
 part,
 weight,
+totalPrice,
 store,
 payment,
 memo
@@ -330,6 +417,8 @@ alert("주문이 접수되었습니다")
 document.getElementById("name").value=""
 document.getElementById("phone").value=""
 document.getElementById("memo").value=""
+document.getElementById("weight").value="500g"
+updatePriceBox()
 
 }
 
