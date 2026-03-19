@@ -63,10 +63,29 @@ color:white;
 cursor:pointer;
 }
 
+button:disabled{
+opacity:0.6;
+cursor:not-allowed;
+}
+
 .notice{
 margin-top:20px;
 font-size:14px;
 color:#ccc;
+line-height:1.6;
+}
+
+.info-text{
+margin-top:10px;
+font-size:14px;
+color:#c89b3c;
+line-height:1.6;
+}
+
+.error-text{
+margin-top:10px;
+font-size:14px;
+color:#ff6b6b;
 line-height:1.6;
 }
 </style>
@@ -81,6 +100,9 @@ line-height:1.6;
 
 <h1>제주육림 공동구매 주문서</h1>
 
+<div id="roundInfo" class="info-text">공동구매 정보를 불러오는 중입니다.</div>
+<div id="loadError" class="error-text"></div>
+
 <label for="name">주문자명</label>
 <input id="name" type="text" placeholder="이름을 입력하세요">
 
@@ -89,10 +111,7 @@ line-height:1.6;
 
 <label for="part">부위 선택</label>
 <select id="part">
-<option>꽃등심</option>
-<option>채끝</option>
-<option>안심</option>
-<option>국거리</option>
+<option>불러오는 중...</option>
 </select>
 
 <label for="weight">중량 선택</label>
@@ -117,7 +136,7 @@ line-height:1.6;
 <label for="memo">요청사항</label>
 <textarea id="memo" placeholder="예: 오후 3시 이후 방문 예정"></textarea>
 
-<button onclick="submitOrder()">주문 접수하기</button>
+<button id="submitBtn" onclick="submitOrder()">주문 접수하기</button>
 
 <div class="notice">
 공동구매 주문 접수 후 담당자가 확인합니다.<br>
@@ -139,6 +158,92 @@ const TELEGRAM_CHAT_ID = "8661434326"
 
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
 
+let currentRound = null
+let loadedProducts = []
+
+function setLoadError(message){
+  document.getElementById("loadError").innerText = message || ""
+}
+
+function setRoundInfo(message){
+  document.getElementById("roundInfo").innerText = message || ""
+}
+
+function setSubmitDisabled(disabled){
+  document.getElementById("submitBtn").disabled = disabled
+}
+
+async function loadActiveRoundAndProducts(){
+  setLoadError("")
+  setSubmitDisabled(true)
+
+  const partSelect = document.getElementById("part")
+  partSelect.innerHTML = "<option>불러오는 중...</option>"
+
+  const { data: roundData, error: roundError } = await supabaseClient
+    .from("purchase_rounds")
+    .select("*")
+    .eq("status", "open")
+    .order("id", { ascending: false })
+    .limit(1)
+    .single()
+
+  if(roundError || !roundData){
+    setRoundInfo("현재 진행 중인 공동구매가 없습니다.")
+    setLoadError("진행 중인 공동구매 회차를 찾을 수 없습니다.")
+    partSelect.innerHTML = "<option>진행 중인 공동구매 없음</option>"
+    return
+  }
+
+  currentRound = roundData
+
+  setRoundInfo(
+    `${roundData.title} / 수령기간: ${formatDate(roundData.pickup_start_at)} ~ ${formatDate(roundData.pickup_end_at)}`
+  )
+
+  const { data: productData, error: productError } = await supabaseClient
+    .from("products")
+    .select("*")
+    .eq("round_id", currentRound.id)
+    .eq("is_active", true)
+    .order("sort_order", { ascending: true })
+
+  if(productError){
+    setLoadError("상품 목록을 불러오지 못했습니다.")
+    partSelect.innerHTML = "<option>상품 불러오기 실패</option>"
+    return
+  }
+
+  loadedProducts = productData || []
+
+  if(!loadedProducts.length){
+    setLoadError("등록된 상품이 없습니다.")
+    partSelect.innerHTML = "<option>등록된 상품 없음</option>"
+    return
+  }
+
+  partSelect.innerHTML = ""
+
+  loadedProducts.forEach(product => {
+    const option = document.createElement("option")
+    option.value = product.name
+    option.textContent = product.name
+    partSelect.appendChild(option)
+  })
+
+  setSubmitDisabled(false)
+}
+
+function formatDate(value){
+  if(!value) return "-"
+  const date = new Date(value)
+
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+
+  return `${year}-${month}-${day}`
+}
 
 async function sendTelegramAlert(data){
 
@@ -168,19 +273,23 @@ text:message
 
 }
 
-
 async function submitOrder(){
 
-const name = document.getElementById("name").value
-const phone = document.getElementById("phone").value
+const name = document.getElementById("name").value.trim()
+const phone = document.getElementById("phone").value.trim()
 const part = document.getElementById("part").value
 const weight = document.getElementById("weight").value
 const store = document.getElementById("store").value
 const payment = document.getElementById("payment").value
-const memo = document.getElementById("memo").value
+const memo = document.getElementById("memo").value.trim()
 
 if(!name || !phone){
 alert("주문자명과 연락처를 입력해주세요")
+return
+}
+
+if(!currentRound){
+alert("현재 진행 중인 공동구매가 없습니다.")
 return
 }
 
@@ -194,11 +303,14 @@ part:part,
 weight:weight,
 pickup_store:store,
 payment_method:payment,
-memo:memo
+memo:memo,
+round_id: currentRound.id,
+order_summary: `${part} ${weight}`
 }
 ])
 
 if(error){
+console.log(error)
 alert("주문 저장 실패")
 return
 }
@@ -220,6 +332,8 @@ document.getElementById("phone").value=""
 document.getElementById("memo").value=""
 
 }
+
+loadActiveRoundAndProducts()
 
 </script>
 
